@@ -234,51 +234,38 @@ void GraphCanvas::mouseDown(const juce::MouseEvent& e)
             return;
         }
 
-        // NEW: If the clicked pin already has connections, disconnect the last one
-        // and drag from its other end — allows rewiring without going back to start
+        // NEW: If the clicked INPUT pin already has a connection, disconnect the last one
+        // and drag from its other end — allows rewiring without going back to start.
+        // Output pins are excluded: they support fan-out (multi-connections) so clicking
+        // them should always start a new cable, never disconnect an existing one.
         PinID dragSourcePin = pinAtPos;
-        if (auto* ag = getActiveGraph())
+        if (pinAtPos.isInput)
         {
-            juce::AudioProcessorGraph::Connection lastConn = {
-                {juce::AudioProcessorGraph::NodeID(), 0},
-                {juce::AudioProcessorGraph::NodeID(), 0}
-            };
-            bool foundConn = false;
-            for (auto& conn : ag->getConnections())
+            if (auto* ag = getActiveGraph())
             {
-                bool matchesSrc = (!pinAtPos.isInput &&
-                                   conn.source.nodeID == pinAtPos.nodeID &&
-                                   conn.source.channelIndex == pinAtPos.pinIndex);
-                bool matchesDst = (pinAtPos.isInput &&
-                                   conn.destination.nodeID == pinAtPos.nodeID &&
-                                   conn.destination.channelIndex == pinAtPos.pinIndex);
-                if (matchesSrc || matchesDst)
+                juce::AudioProcessorGraph::Connection lastConn = {
+                    {juce::AudioProcessorGraph::NodeID(), 0},
+                    {juce::AudioProcessorGraph::NodeID(), 0}
+                };
+                bool foundConn = false;
+                for (auto& conn : ag->getConnections())
                 {
-                    lastConn = conn;
-                    foundConn = true;
-                    // Keep iterating — we want the last connection in the list
+                    if (conn.destination.nodeID == pinAtPos.nodeID &&
+                        conn.destination.channelIndex == pinAtPos.pinIndex)
+                    {
+                        lastConn = conn;
+                        foundConn = true;
+                    }
                 }
-            }
-            if (foundConn)
-            {
-                ag->removeConnection(lastConn);
-                markDirty();
-                // Drag from the other end of the removed connection
-                if (pinAtPos.isInput)
+                if (foundConn)
                 {
-                    // Clicked the destination → anchor at source
-                    dragSourcePin.nodeID    = lastConn.source.nodeID;
-                    dragSourcePin.pinIndex  = lastConn.source.channelIndex;
-                    dragSourcePin.isInput   = false;
-                    dragSourcePin.isMidi    = pinAtPos.isMidi;
-                }
-                else
-                {
-                    // Clicked the source → anchor at destination
-                    dragSourcePin.nodeID    = lastConn.destination.nodeID;
-                    dragSourcePin.pinIndex  = lastConn.destination.channelIndex;
-                    dragSourcePin.isInput   = true;
-                    dragSourcePin.isMidi    = pinAtPos.isMidi;
+                    ag->removeConnection(lastConn);
+                    markDirty();
+                    // Anchor drag at the source end of the removed connection
+                    dragSourcePin.nodeID   = lastConn.source.nodeID;
+                    dragSourcePin.pinIndex = lastConn.source.channelIndex;
+                    dragSourcePin.isInput  = false;
+                    dragSourcePin.isMidi   = pinAtPos.isMidi;
                 }
             }
         }
