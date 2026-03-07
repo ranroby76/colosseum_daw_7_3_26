@@ -169,7 +169,7 @@ FILE DETAILS
    Type: text/plain
 
 13. src/ContainerProcessor.cpp
-   Size: 37.96 KB
+   Size: 37.85 KB
    Type: text/plain
 
 14. src/ContainerProcessor.h
@@ -201,11 +201,11 @@ FILE DETAILS
    Type: text/plain
 
 21. src/GraphCanvas_Mouse.cpp
-   Size: 136.43 KB
+   Size: 138.65 KB
    Type: text/plain
 
 22. src/GraphCanvas_Paint_drawNodeButtons.cpp
-   Size: 19.84 KB
+   Size: 18.96 KB
    Type: text/plain
 
 23. src/GraphCanvas_Paint.cpp
@@ -429,7 +429,7 @@ FILE DETAILS
    Type: text/plain
 
 78. src/PluginProcessor.h
-   Size: 27.63 KB
+   Size: 26.86 KB
    Type: text/plain
 
 79. src/PluginScanWorker.cpp
@@ -449,7 +449,7 @@ FILE DETAILS
    Type: text/plain
 
 83. src/RegistrationComponent.h
-   Size: 7.08 KB
+   Size: 6.69 KB
    Type: text/plain
 
 84. src/RegistrationManager.cpp
@@ -5798,7 +5798,7 @@ private:
 
 --------------------------------------------------------------------------------
 File: src/ContainerProcessor.cpp
-Size: 37.96 KB
+Size: 37.85 KB
 --------------------------------------------------------------------------------
 
 // #D:\Workspace\Subterraneum_plugins_daw\src\ContainerProcessor.cpp
@@ -6713,11 +6713,6 @@ bool ContainerProcessor::loadPreset(const juce::File& file)
     return restoreFromXml(xmlStr);
 }
 
-
-
-
---------------------------------------------------------------------------------
-File: src/ContainerProcessor.h
 
 
 
@@ -9953,9 +9948,8 @@ Size: 26.05 KB
 
 --------------------------------------------------------------------------------
 File: src/GraphCanvas_Mouse.cpp
-Size: 136.43 KB
+Size: 138.65 KB
 --------------------------------------------------------------------------------
-
 
 // D:\Workspace\Subterraneum_plugins_daw\src\GraphCanvas_Mouse.cpp
 // CRITICAL FIX: Use isInstrument() instead of getPluginDescription().isInstrument
@@ -10193,10 +10187,59 @@ void GraphCanvas::mouseDown(const juce::MouseEvent& e)
             return;
         }
 
+        // NEW: If the clicked pin already has connections, disconnect the last one
+        // and drag from its other end — allows rewiring without going back to start
+        PinID dragSourcePin = pinAtPos;
+        if (auto* ag = getActiveGraph())
+        {
+            juce::AudioProcessorGraph::Connection lastConn = {
+                {juce::AudioProcessorGraph::NodeID(), 0},
+                {juce::AudioProcessorGraph::NodeID(), 0}
+            };
+            bool foundConn = false;
+            for (auto& conn : ag->getConnections())
+            {
+                bool matchesSrc = (!pinAtPos.isInput &&
+                                   conn.source.nodeID == pinAtPos.nodeID &&
+                                   conn.source.channelIndex == pinAtPos.pinIndex);
+                bool matchesDst = (pinAtPos.isInput &&
+                                   conn.destination.nodeID == pinAtPos.nodeID &&
+                                   conn.destination.channelIndex == pinAtPos.pinIndex);
+                if (matchesSrc || matchesDst)
+                {
+                    lastConn = conn;
+                    foundConn = true;
+                    // Keep iterating — we want the last connection in the list
+                }
+            }
+            if (foundConn)
+            {
+                ag->removeConnection(lastConn);
+                markDirty();
+                // Drag from the other end of the removed connection
+                if (pinAtPos.isInput)
+                {
+                    // Clicked the destination → anchor at source
+                    dragSourcePin.nodeID    = lastConn.source.nodeID;
+                    dragSourcePin.pinIndex  = lastConn.source.channelIndex;
+                    dragSourcePin.isInput   = false;
+                    dragSourcePin.isMidi    = pinAtPos.isMidi;
+                }
+                else
+                {
+                    // Clicked the source → anchor at destination
+                    dragSourcePin.nodeID    = lastConn.destination.nodeID;
+                    dragSourcePin.pinIndex  = lastConn.destination.channelIndex;
+                    dragSourcePin.isInput   = true;
+                    dragSourcePin.isMidi    = pinAtPos.isMidi;
+                }
+            }
+        }
+
         dragCable.active = true;
-        dragCable.sourcePin = pinAtPos;
+        dragCable.sourcePin = dragSourcePin;
         dragCable.currentDragPos = pos;
-        dragCable.dragColor = getPinColor(pinAtPos, getActiveGraph() ? getActiveGraph()->getNodeForId(pinAtPos.nodeID) : nullptr);
+        dragCable.dragColor = getPinColor(dragSourcePin, getActiveGraph() ? getActiveGraph()->getNodeForId(dragSourcePin.nodeID) : nullptr);
 
         // CRITICAL FIX: Start high-frequency timer ONCE when drag begins
         startTimer(MouseInteractionTimerID, 16);  // 60 Hz for smooth dragging
@@ -13285,10 +13328,9 @@ void GraphCanvas::navigateMinimapTo(juce::Point<float> localClickPos)
 
 
 
-
 --------------------------------------------------------------------------------
 File: src/GraphCanvas_Paint_drawNodeButtons.cpp
-Size: 19.84 KB
+Size: 18.96 KB
 --------------------------------------------------------------------------------
 
 // #D:\Workspace\Subterraneum_plugins_daw\src\GraphCanvas_Paint_drawNodeButtons.cpp
@@ -13617,21 +13659,6 @@ void GraphCanvas::drawNodeButtons(juce::Graphics& g, juce::AudioProcessorGraph::
         btnX += Style::bottomBtnWidth + Style::bottomBtnSpacing;
     }
 
-    // =========================================================================
-    // FIX 1: L button (load/reload) - ONLY for manually-loaded VST2/VST3 system tools
-    // =========================================================================
-    bool isManuallyLoaded = node->properties.getWithDefault("manuallyLoaded", false);
-    if (meteringProc && (meteringProc->isVST2() || meteringProc->isVST3()) && isManuallyLoaded)
-    {
-        auto loadRect = juce::Rectangle<float>(btnX, btnY, Style::bottomBtnWidth, Style::bottomBtnHeight);
-        g.setColour(juce::Colour(0xFF4DA6FF));  // Blue
-        g.fillRoundedRectangle(loadRect, 3.0f);
-        g.setColour(juce::Colours::black);
-        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        g.drawText("L", loadRect, juce::Justification::centred);
-        btnX += Style::bottomBtnWidth + Style::bottomBtnSpacing;
-    }
-
     auto deleteRect = juce::Rectangle<float>(btnX, btnY, Style::bottomBtnWidth, Style::bottomBtnHeight);
     g.setColour(juce::Colours::darkred);
     g.fillRoundedRectangle(deleteRect, 3.0f);
@@ -13701,7 +13728,6 @@ void GraphCanvas::drawContainerButtons(juce::Graphics& g, juce::AudioProcessorGr
     g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
     g.drawText("X", deleteRect, juce::Justification::centred);
 }
-
 
 
 
@@ -34837,11 +34863,7 @@ private:
 
 --------------------------------------------------------------------------------
 File: src/PluginProcessor.h
-Size: 27.63 KB
---------------------------------------------------------------------------------
-
-File: src/PluginProcessor.h
-Size: 26.78 KB
+Size: 26.86 KB
 --------------------------------------------------------------------------------
 
 // CRITICAL FIX: NEVER call getPluginDescription() after construction!
@@ -35505,22 +35527,6 @@ private:
 };
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
-
-
-
-
---------------------------------------------------------------------------------
-File: src/PluginScanWorker.cpp
-Size: 14.25 KB
---------------------------------------------------------------------------------
-
-// #D:\Workspace\Subterraneum_plugins_daw\src\PluginScanWorker.cpp
-// Scan worker — runs inside child process, loads ONE plugin, writes metadata.
-// If this crashes, only the child process dies — main Colosseum is unaffected.
-// Watchdog thread self-terminates after 20 seconds to prevent infinite hangs.
-// FIX: Writes JSON IMMEDIATELY after getting metadata, before any cleanup
-// FIX: Flushes log after each write to ensure visibility on crash
-
 
 
 
@@ -36470,7 +36476,7 @@ private:
 
 --------------------------------------------------------------------------------
 File: src/RegistrationComponent.h
-Size: 7.08 KB
+Size: 6.69 KB
 --------------------------------------------------------------------------------
 
 #pragma once
@@ -36622,25 +36628,6 @@ private:
     }
 };
 
-
-
---------------------------------------------------------------------------------
-File: src/RegistrationManager.cpp
-Size: 5.35 KB
---------------------------------------------------------------------------------
-
-#include "RegistrationManager.h"
-
-#if JUCE_WINDOWS
-#include <windows.h>
-#endif
-
-#if JUCE_LINUX
-#include <fstream>
-#include <string>
-#endif
-
-void RegistrationManager::checkRegistration() {
 
 
 
