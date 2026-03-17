@@ -69,9 +69,10 @@ AudioSettingsTab::AudioSettingsTab(SubterraneumAudioProcessor& p) : processor(p)
     // Default patch buttons
     addAndMakeVisible(saveDefaultBtn);
     saveDefaultBtn.addListener(this);
+    saveDefaultBtn.setButtonText("Save Current Patch as Default Start Patch");
     saveDefaultBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(40, 80, 40));
     saveDefaultBtn.setColour(juce::TextButton::textColourOffId, juce::Colours::lightgreen);
-    saveDefaultBtn.setTooltip("Right-click for info");
+    saveDefaultBtn.setTooltip("Saves current rack state and audio settings as the default patch loaded automatically on startup");
     saveDefaultBtn.infoText = "Saves the current rack state and audio\nsettings as the default patch loaded\nautomatically on startup.";
     
     addAndMakeVisible(clearDefaultBtn);
@@ -287,9 +288,9 @@ void AudioSettingsTab::resized() {
     auto area = getLocalBounds().reduced(10); 
     
     // =========================================================================
-    // Driver Settings - Top row (increased height for folder controls)
+    // Driver Settings - Top row (increased height for folder + default patch controls)
     // =========================================================================
-    auto driverArea = area.removeFromTop(160); 
+    auto driverArea = area.removeFromTop(190); 
     driverGroup.setBounds(driverArea);
     driverArea.reduce(10, 25); 
     
@@ -333,15 +334,21 @@ void AudioSettingsTab::resized() {
     auto samplerLabelArea = row3.removeFromRight(350);
     samplerFolderLabel.setBounds(samplerLabelArea);
     
-    driverArea.removeFromTop(2);
+    driverArea.removeFromTop(4);
     
-    // Fourth row: Default patch buttons (left) + label (right)
-    auto row4 = driverArea.removeFromTop(24);
-    saveDefaultBtn.setBounds(row4.removeFromLeft(130));
-    row4.removeFromLeft(5);
-    clearDefaultBtn.setBounds(row4.removeFromLeft(100));
-    row4.removeFromLeft(10);
+    // Fourth row: [Save Current Patch as Default Start Patch] (right) + label (left)
+    auto row4 = driverArea.removeFromTop(26);
+    auto saveArea = row4.removeFromRight(310);
+    saveDefaultBtn.setBounds(saveArea);
+    row4.removeFromRight(10);
     defaultPatchLabel.setBounds(row4);
+    
+    driverArea.removeFromTop(3);
+    
+    // Fifth row: [Clear Default] (right, under save button)
+    auto row5 = driverArea.removeFromTop(24);
+    auto clearArea = row5.removeFromRight(310);
+    clearDefaultBtn.setBounds(clearArea.removeFromLeft(130));
     
     area.removeFromTop(10);
     
@@ -563,7 +570,7 @@ void AudioSettingsTab::saveAsDefault() {
     auto safeThis = juce::Component::SafePointer<AudioSettingsTab>(this);
     juce::Timer::callAfterDelay(1500, [safeThis]() {
         if (safeThis) {
-            safeThis->saveDefaultBtn.setButtonText("Save as Default");
+            safeThis->saveDefaultBtn.setButtonText("Save Current Patch as Default Start Patch");
             safeThis->saveDefaultBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(40, 80, 40));
         }
     });
@@ -584,7 +591,7 @@ void AudioSettingsTab::clearDefault() {
         auto safeThis = juce::Component::SafePointer<AudioSettingsTab>(this);
         juce::Timer::callAfterDelay(1500, [safeThis]() {
             if (safeThis) {
-                safeThis->clearDefaultBtn.setButtonText("Clear Default");
+                safeThis->clearDefaultBtn.setButtonText("Clear Default Start Patch");
                 safeThis->clearDefaultBtn.setColour(juce::TextButton::buttonColourId, juce::Colour(80, 40, 40));
             }
         });
@@ -1023,6 +1030,14 @@ void AudioSettingsTab::comboBoxChanged(juce::ComboBox* cb) {
             }
             
             updateStatusLabel();
+            
+            // FIX: ASIO drivers may not report the correct sample rate immediately
+            // after device initialization. Schedule a delayed refresh to pick up
+            // the actual rate once the driver has fully settled.
+            juce::Timer::callAfterDelay(600, [safeThis = juce::Component::SafePointer<AudioSettingsTab>(this)]() {
+                if (safeThis != nullptr)
+                    safeThis->updateStatusLabel();
+            });
         } 
     }
     else if (cb == &numeratorCombo) {
@@ -1044,6 +1059,12 @@ void AudioSettingsTab::buttonClicked(juce::Button* b) {
         if (auto* device = deviceManager->getCurrentAudioDevice()) { 
             if (device->hasControlPanel()) 
                 device->showControlPanel();
+            // FIX: After ASIO control panel closes, the user may have changed
+            // the sample rate or buffer size. Refresh status after a short delay.
+            juce::Timer::callAfterDelay(800, [safeThis = juce::Component::SafePointer<AudioSettingsTab>(this)]() {
+                if (safeThis != nullptr)
+                    safeThis->updateStatusLabel();
+            });
         } 
     }
     else if (b == &tapTempoBtn) {
@@ -1129,3 +1150,6 @@ void AudioSettingsTab::reconnectMidiDevices()
         }
     });
 }
+
+
+

@@ -46,6 +46,7 @@ public:
     void mouseEnter(const juce::MouseEvent&) override { hovered = true; repaint(); }
     void mouseExit(const juce::MouseEvent&) override { hovered = false; repaint(); }
     void mouseDoubleClick(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;  // FIX: Single click loads patch for live use
     
     const juce::File& getFile() const { return patchFile; }
     
@@ -258,3 +259,6 @@ private:
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginBrowserPanel)
 };
+
+
+

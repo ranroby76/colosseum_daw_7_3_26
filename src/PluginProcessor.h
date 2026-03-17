@@ -551,6 +551,36 @@ public:
     static juce::String getShortFormatName(const juce::String& fullFormatName);
     static juce::Colour getFormatColor(const juce::String& formatName);
 
+    // =========================================================================
+    // Master PlayHead — provides masterTempo/timeSig to the graph and all plugins
+    // In standalone mode, there is no host playhead. This fills the gap.
+    // When transportSyncedToMaster is true, MeteringProcessor's PluginTransportPlayHead
+    // calls parentPlayHead->getPosition() which reaches this via the graph.
+    // =========================================================================
+    class MasterPlayHead : public juce::AudioPlayHead {
+    public:
+        MasterPlayHead(SubterraneumAudioProcessor& ownerRef) : owner(ownerRef) {}
+        
+        juce::Optional<PositionInfo> getPosition() const override
+        {
+            PositionInfo info;
+            info.setBpm(owner.masterTempo.load());
+            info.setTimeSignature(juce::AudioPlayHead::TimeSignature {
+                owner.masterTimeSigNumerator.load(),
+                owner.masterTimeSigDenominator.load()
+            });
+            info.setIsPlaying(false);
+            info.setTimeInSamples(0);
+            info.setTimeInSeconds(0.0);
+            return info;
+        }
+        
+    private:
+        SubterraneumAudioProcessor& owner;
+    };
+    
+    MasterPlayHead masterPlayHead { *this };
+
     std::unique_ptr<juce::AudioProcessorGraph> mainGraph;
     juce::AudioProcessorGraph::Node::Ptr audioInputNode, audioOutputNode, midiInputNode, midiOutputNode;
     juce::KnownPluginList knownPluginList;
@@ -659,3 +689,5 @@ private:
 };
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
+
+

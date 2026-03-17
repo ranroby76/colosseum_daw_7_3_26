@@ -158,7 +158,7 @@ private:
     juce::Label containerFolderLabel { "contFolder", "" };
     
     // Default patch auto-load
-    // Save as Default button with right-click info popup
+    // Save Current Patch as Default Start Patch button with right-click info popup
     class InfoButton : public juce::TextButton {
     public:
         using juce::TextButton::TextButton;
@@ -167,7 +167,7 @@ private:
             if (e.mods.isRightButtonDown() && infoText.isNotEmpty()) {
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::InfoIcon,
-                    "Save as Default",
+                    "Default Start Patch",
                     infoText,
                     "OK");
                 return;
@@ -175,8 +175,8 @@ private:
             juce::TextButton::mouseDown(e);
         }
     };
-    InfoButton saveDefaultBtn { "Save as Default" };
-    juce::TextButton clearDefaultBtn { "Clear Default" };
+    InfoButton saveDefaultBtn { "Save Current Patch as Default Start Patch" };
+    juce::TextButton clearDefaultBtn { "Clear Default Start Patch" };
     juce::Label defaultPatchLabel { "defaultPatch", "" };
     
     // =========================================================================
@@ -287,3 +287,5 @@ private:
     // MIDI reconnection
     void reconnectMidiDevices();
 };
+
+

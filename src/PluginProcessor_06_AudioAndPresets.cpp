@@ -1,4 +1,3 @@
-
 #include "PluginProcessor.h"
 #include <vector>
 #include "PluginEditor.h"
@@ -36,6 +35,14 @@ void SubterraneumAudioProcessor::prepareToPlay(double sampleRate, int samplesPer
     if (outputs < 2) outputs = 2;
 
     mainGraph->setPlayConfigDetails(inputs, outputs, sampleRate, samplesPerBlock);
+    
+    // =========================================================================
+    // FIX: Set master playhead on graph so all plugins receive masterTempo
+    // In standalone mode there is no host playhead — this provides BPM/timeSig
+    // to MeteringProcessor → PluginTransportPlayHead → inner plugins
+    // =========================================================================
+    mainGraph->setPlayHead(&masterPlayHead);
+    
     mainGraph->prepareToPlay(sampleRate, samplesPerBlock);
     
     // CPU FIX: Reset meter counter on prepare
@@ -982,4 +989,8 @@ void SubterraneumAudioProcessor::restoreGraphFromXml(const juce::String& xmlStr,
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new SubterraneumAudioProcessor();
 }
+
+
+
+
 

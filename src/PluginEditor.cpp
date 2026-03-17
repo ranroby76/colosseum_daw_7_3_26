@@ -7,6 +7,7 @@
 // FIX: Added Latcher and MidiMultiFilter to onToolDropped handler
 
 #include "PluginEditor.h"
+#include "version_roby.h"
 #include "SimpleConnectorProcessor.h"
 #include "StereoMeterProcessor.h"
 #include "MidiMonitorProcessor.h"
@@ -433,10 +434,24 @@ void SubterraneumAudioProcessorEditor::buttonClicked(juce::Button* b) {
         updatePluginBrowserVisibility();
         resized();
     } else if (b == &loadButton) { 
-        fileChooser = std::make_unique<juce::FileChooser>("Load Patch", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.subt");
+        // FIX: Use FavoritesPatchFolder as default directory (consistent with RHS panel)
+        juce::File startDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+        if (auto* settings = audioProcessor.appProperties.getUserSettings()) {
+            auto path = settings->getValue("FavoritesPatchFolder", "");
+            if (path.isNotEmpty()) {
+                juce::File dir(path);
+                if (dir.isDirectory()) startDir = dir;
+            }
+        }
+        fileChooser = std::make_unique<juce::FileChooser>("Load Patch", startDir, "*.subt");
         fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) { 
             auto file = fc.getResult(); 
             if (file != juce::File()) { 
+                // FIX: Remember this folder as the default patch folder
+                if (auto* settings = audioProcessor.appProperties.getUserSettings()) {
+                    settings->setValue("FavoritesPatchFolder", file.getParentDirectory().getFullPathName());
+                    settings->saveIfNeeded();
+                }
                 graphCanvas.closeAllPluginWindows();
                 audioProcessor.loadUserPreset(file); 
                 graphCanvas.refreshCache();
@@ -447,12 +462,26 @@ void SubterraneumAudioProcessorEditor::buttonClicked(juce::Button* b) {
             } 
         });
     } else if (b == &saveButton) { 
-        fileChooser = std::make_unique<juce::FileChooser>("Save Patch", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.subt");
+        // FIX: Use FavoritesPatchFolder as default directory (consistent with RHS panel)
+        juce::File startDir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+        if (auto* settings = audioProcessor.appProperties.getUserSettings()) {
+            auto path = settings->getValue("FavoritesPatchFolder", "");
+            if (path.isNotEmpty()) {
+                juce::File dir(path);
+                if (dir.isDirectory()) startDir = dir;
+            }
+        }
+        fileChooser = std::make_unique<juce::FileChooser>("Save Patch", startDir, "*.subt");
         fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles, [this](const juce::FileChooser& fc) { 
             auto file = fc.getResult(); 
             if (file != juce::File()) { 
                 if (!file.hasFileExtension(".subt")) 
                     file = file.withFileExtension(".subt");
+                // FIX: Remember this folder as the default patch folder
+                if (auto* settings = audioProcessor.appProperties.getUserSettings()) {
+                    settings->setValue("FavoritesPatchFolder", file.getParentDirectory().getFullPathName());
+                    settings->saveIfNeeded();
+                }
                 audioProcessor.saveUserPreset(file); 
             } 
         });
@@ -510,6 +539,13 @@ void SubterraneumAudioProcessorEditor::paint(juce::Graphics& g) {
         int colosseumX = Style::leftMenuWidth + (centerArea - colosseumWidth) / 2;
         g.drawImage(colosseumLogo, colosseumX, logoY, colosseumWidth, logoHeight, 
                     0, 0, colosseumLogo.getWidth(), colosseumLogo.getHeight());
+        
+        // Version label — small text to the right of the colosseum logo
+        g.setColour(juce::Colours::grey);
+        g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        g.drawText("v" COLOSSEUM_VERSION_STRING, 
+                   colosseumX + colosseumWidth + 5, logoY, 50, logoHeight,
+                   juce::Justification::centredLeft, false);
     }
     
     // Draw footer background

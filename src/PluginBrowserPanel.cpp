@@ -1,14 +1,3 @@
-
-// #D:\Workspace\Subterraneum_plugins_daw\src\PluginBrowserPanel.cpp
-// FIX: Removed vendor from items, removed favorites, added title,
-// collapsible vendor/folder groups, custom drag image for visibility
-// FIX: Added Recorder to System Tools
-// NEW: Hidden plugins (eye toggle) are filtered out
-// FIX: A-Z sorting in getFilteredPlugins()
-// FIX: Smart ByFolder grouping — skips generic VST3/VST folder names
-// FIX: Sort within groups alphabetically
-// FIX: Added MidiMultiFilter to System Tools
-
 #include "PluginBrowserPanel.h"
 #include "ContainerProcessor.h"
 
@@ -104,6 +93,13 @@ void FavoritePatchItem::paint(juce::Graphics& g) {
 
 void FavoritePatchItem::mouseDoubleClick(const juce::MouseEvent&) {
     if (onPatchDoubleClick) onPatchDoubleClick(patchFile);
+}
+
+// FIX: Single click also loads patch — better UX for live performance
+void FavoritePatchItem::mouseUp(const juce::MouseEvent& e) {
+    if (e.mouseWasClicked() && !e.mods.isPopupMenu()) {
+        if (onPatchDoubleClick) onPatchDoubleClick(patchFile);
+    }
 }
 
 // =============================================================================
@@ -1189,3 +1185,5 @@ void PluginBrowserPanel::showWorkspaceSelector(const juce::File& patchFile) {
     if (auto* editor = dynamic_cast<juce::AudioProcessorEditor*>(getTopLevelComponent()))
         editor->resized();
 }
+
+

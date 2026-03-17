@@ -9,6 +9,14 @@
 #include "PluginEditor.h"
 #include "PluginScanWorker.h"
 #include "OutOfProcessScanner.h"
+#include "Style.h"
+#include "version_roby.h"
+
+// =============================================================================
+// Global Colosseum LookAndFeel — black-green themed dialogs with logo
+// Must be static/global so it outlives all windows
+// =============================================================================
+static std::unique_ptr<ColosseumLookAndFeel> g_colosseumLookAndFeel;
 
 // =============================================================================
 // Debug logger for child process startup
@@ -26,11 +34,17 @@ public:
     SubterraneumApplication() {}
 
     const juce::String getApplicationName() override { return "Colosseum"; }
-    const juce::String getApplicationVersion() override { return "1.0.0"; }
+    const juce::String getApplicationVersion() override { return COLOSSEUM_VERSION_STRING; }
     bool moreThanOneInstanceAllowed() override { return true; }
 
     void initialise(const juce::String& commandLine) override
     {
+        // =================================================================
+        // Apply global black-green themed LookAndFeel BEFORE any dialogs
+        // =================================================================
+        g_colosseumLookAndFeel = std::make_unique<ColosseumLookAndFeel>();
+        juce::LookAndFeel::setDefaultLookAndFeel(g_colosseumLookAndFeel.get());
+        
         logChild("=== CHILD STARTUP ===");
         logChild("Raw commandLine: " + commandLine);
         logChild("commandLine length: " + juce::String(commandLine.length()));
@@ -102,6 +116,10 @@ public:
         logChild("shutdown() called, scanMode=" + juce::String(scanMode ? "true" : "false"));
         mainWindow = nullptr;
         OutOfProcessScanner::cleanupTempFiles();
+        
+        // Clean up global LookAndFeel before exit
+        juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
+        g_colosseumLookAndFeel = nullptr;
         
         if (!scanMode)
             juce::Process::terminate();
