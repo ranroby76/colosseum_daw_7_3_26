@@ -15,7 +15,7 @@ jobs:
     env:
       SIGNING_ENABLED: ${{ secrets.MACOS_CERTIFICATE }}
       BUILD_DIR: build
-      APP_ARTEFACTS: build/SubterraneumApp_artefacts/Release
+      APP_ARTEFACTS: build/SamplerArenaApp_artefacts/Release
 
     steps:
       - name: Checkout Repository
@@ -36,8 +36,14 @@ jobs:
         run: |
           mkdir -p assets
 
-          # Check if .icns already exists
-          if [ -f "assets/Colosseum.icns" ]; then
+          # Check if .icns already exists in repo root
+          if [ -f "icon.icns" ]; then
+            cp icon.icns assets/Icon.icns
+            echo "Copied icon.icns to assets/Icon.icns"
+            exit 0
+          fi
+
+          if [ -f "assets/Icon.icns" ]; then
             echo "macOS icon already exists"
             exit 0
           fi
@@ -59,12 +65,14 @@ jobs:
               fi
             fi
             SOURCE_IMG="/tmp/icon_source.png"
-          elif [ -f "assets/colosseum_logo.png" ]; then
-            SOURCE_IMG="assets/colosseum_logo.png"
+          elif [ -f "assets/sampler_arena_logo.png" ]; then
+            SOURCE_IMG="assets/sampler_arena_logo.png"
+          elif [ -f "assets/logo.png" ]; then
+            SOURCE_IMG="assets/logo.png"
           fi
 
           if [ -z "$SOURCE_IMG" ] || [ ! -f "$SOURCE_IMG" ]; then
-            echo "No source image found for icon (tried icon.ico, assets/colosseum_logo.png)"
+            echo "No source image found for icon - skipping"
             exit 0
           fi
 
@@ -125,10 +133,11 @@ jobs:
       - name: Locate App Bundle
         id: find_app
         run: |
-          APP_PATH="${{ env.APP_ARTEFACTS }}/Colosseum.app"
+          # Try the expected path first
+          APP_PATH=$(find ${{ env.APP_ARTEFACTS }} -name "*.app" -type d 2>/dev/null | head -1)
 
-          # Fallback: search if not at expected path
-          if [ ! -d "$APP_PATH" ]; then
+          # Fallback: search the entire build dir
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
             echo "App not at expected path, searching..."
             APP_PATH=$(find ${{ env.BUILD_DIR }} -name "*.app" -type d | head -1)
           fi
@@ -146,6 +155,7 @@ jobs:
           ls -la "$APP_PATH/Contents/"
           ls -la "$APP_PATH/Contents/MacOS/" || true
           ls -la "$APP_PATH/Contents/Resources/" || true
+          ls -la "$APP_PATH/Contents/Frameworks/" || true
 
           # Verify universal binary
           echo "=== Architecture Check ==="
@@ -168,6 +178,10 @@ jobs:
               <key>com.apple.security.cs.disable-library-validation</key>
               <true/>
               <key>com.apple.security.device.audio-input</key>
+              <true/>
+              <key>com.apple.security.files.user-selected.read-write</key>
+              <true/>
+              <key>com.apple.security.files.downloads.read-write</key>
               <true/>
           </dict>
           </plist>
@@ -194,10 +208,11 @@ jobs:
           echo "Signing with identity: $IDENTITY"
           echo "App path: $APP_PATH"
 
-          # Sign inner binaries first (inside-out signing)
+          # Sign all inner binaries first (deepest level)
           find "$APP_PATH" -type f \( -name "*.dylib" -o -name "*.so" \) \
             -exec codesign --force --strict --options runtime --sign "$IDENTITY" --timestamp --entitlements entitlements.plist {} \;
 
+          # Sign frameworks
           find "$APP_PATH" -type d -name "*.framework" \
             -exec codesign --force --strict --options runtime --sign "$IDENTITY" --timestamp --entitlements entitlements.plist {} \;
 
@@ -211,23 +226,18 @@ jobs:
           codesign -d --entitlements :- "$APP_PATH"
 
       # =================================================================
-      # FIX: Create .dmg FIRST, then notarize the .dmg, then staple .dmg
-      # Old flow: zip → notarize zip → staple .app → re-zip
-      #   Problem: .zip CANNOT be stapled, so the downloaded zip has no ticket
-      #   On Apple Silicon + latest macOS, Gatekeeper silently blocks it
-      # New flow: sign .app → create .dmg → notarize .dmg → staple .dmg
-      #   .dmg CAN be stapled — notarization ticket embedded in the download
+      # Create .dmg, then notarize it, then staple
       # =================================================================
       - name: Create DMG
         if: ${{ env.SIGNING_ENABLED != '' }}
         env:
           APP_PATH: ${{ steps.find_app.outputs.APP_PATH }}
         run: |
-          hdiutil create -volname "Colosseum" \
+          hdiutil create -volname "Sampler Arena" \
             -srcfolder "$APP_PATH" \
             -ov -format UDZO \
-            "Colosseum_Mac_Universal.dmg"
-          echo "Created Colosseum_Mac_Universal.dmg"
+            "SamplerArena_Mac_Universal.dmg"
+          echo "Created SamplerArena_Mac_Universal.dmg"
 
       - name: Notarize DMG
         if: ${{ env.SIGNING_ENABLED != '' }}
@@ -237,17 +247,17 @@ jobs:
           TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
         run: |
           echo "=== Submitting DMG for notarization ==="
-          xcrun notarytool submit "Colosseum_Mac_Universal.dmg" \
+          xcrun notarytool submit "SamplerArena_Mac_Universal.dmg" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
             --team-id "$TEAM_ID" \
             --wait
 
           echo "=== Stapling notarization ticket to DMG ==="
-          xcrun stapler staple "Colosseum_Mac_Universal.dmg"
+          xcrun stapler staple "SamplerArena_Mac_Universal.dmg"
 
           echo "=== Verifying staple ==="
-          xcrun stapler validate "Colosseum_Mac_Universal.dmg"
+          xcrun stapler validate "SamplerArena_Mac_Universal.dmg"
           echo "DMG is signed, notarized, and stapled"
 
       - name: Package Unsigned App
@@ -256,21 +266,21 @@ jobs:
           APP_PATH: ${{ steps.find_app.outputs.APP_PATH }}
         run: |
           echo "Creating unsigned package from $APP_PATH"
-          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "Colosseum_Mac_Unsigned.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP_PATH" "SamplerArena_Mac_Unsigned.zip"
 
       - name: Upload Signed DMG
         if: ${{ env.SIGNING_ENABLED != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Colosseum-Mac-App-Signed
-          path: Colosseum_Mac_Universal.dmg
+          name: SamplerArena-Mac-App-Signed
+          path: SamplerArena_Mac_Universal.dmg
 
       - name: Upload Unsigned App
         if: ${{ env.SIGNING_ENABLED == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Colosseum-Mac-App-Unsigned
-          path: Colosseum_Mac_Unsigned.zip
+          name: SamplerArena-Mac-App-Unsigned
+          path: SamplerArena_Mac_Unsigned.zip
 
       - name: Cleanup Keychain
         if: always()
